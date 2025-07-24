@@ -8,6 +8,7 @@
   4) Apply registry lockdown only, with checks
   5) Check public IP, DNS server configuration, and geolocation details
   6) Show detailed documentation and references
+  7) Revert to default settings
   Q) Quit
 .NOTES
   Run this in an elevated PowerShell session.
@@ -145,7 +146,7 @@ Function Check-PublicIPAndDns {
     # Step 1: Retrieve Public IP
     Write-Progress -Activity $activity -Status "Retrieving public IP…" -PercentComplete 0
     Try {
-        $publicIP = Invoke-RestMethod -Uri 'https://api.ipify.org?format=json' -UseBasicParsing -ErrorAction Stop | Select-Object -ExpandProperty ip
+        $publicIP = Invoke-RestMethod -Uri 'http://api.ipify.org?format=json' -UseBasicParsing -ErrorAction Stop | Select-Object -ExpandProperty ip
         Write-Progress -Activity $activity -Status "Public IP retrieved: $publicIP" -PercentComplete 50
         Write-Host "  ✔ Public IP: $publicIP" -ForegroundColor Green
     } Catch {
@@ -233,7 +234,51 @@ Function Show-Menu {
     Write-Host "4) Apply registry lockdown only, with checks"
     Write-Host "5) Check public IP, DNS server configuration, and geolocation details"
     Write-Host "6) Show detailed documentation and references"
+    Write-Host "7) Revert to default settings"
     Write-Host "Q) Quit"
+}
+
+Function Revert-DefaultSettings {
+    Write-Host " >> Reverting to default settings..." -ForegroundColor Cyan
+
+    # Re-enable services
+    foreach ($svc in $services) {
+        Write-Host " >> Enabling service '$svc' ..." -ForegroundColor Cyan
+        Try {
+            Set-Service -Name $svc -StartupType Automatic -ErrorAction Stop
+            Start-Service -Name $svc -ErrorAction Stop
+            Write-Host "  ✔ Service '$svc' enabled and started." -ForegroundColor Green
+        } Catch {
+            Write-Warning "  ⚠ Could not enable/start '$svc': $_"
+        }
+    }
+
+    # Re-enable Wi-Fi adapters
+    Write-Host " >> Enabling Wi‑Fi adapters ..." -ForegroundColor Cyan
+    $wifiAdapters = Get-NetAdapter -Physical | Where-Object { $_.InterfaceDescription -Match 'Wireless|Wi-?Fi' }
+    If ($wifiAdapters) {
+        foreach ($adapter in $wifiAdapters) {
+            Enable-NetAdapter -Name $adapter.Name -Confirm:$false -ErrorAction SilentlyContinue
+            $status = (Get-NetAdapter -Name $adapter.Name -ErrorAction SilentlyContinue).Status
+            Write-Host "  ✔ Adapter '$($adapter.Name)' status: $status"
+        }
+    } Else {
+        Write-Host "  ⚠ No Wi‑Fi adapters found."
+    }
+
+    # Reset registry values
+    Write-Host " >> Resetting registry values to default..." -ForegroundColor Cyan
+    foreach ($name in $regValues.Keys) {
+        Try {
+            Remove-ItemProperty -Path $regPath -Name $name -ErrorAction Stop
+            Write-Host "  ✔ Registry value '$name' removed." -ForegroundColor Green
+        } Catch {
+            Write-Warning "  ⚠ Could not remove registry value '$name': $_"
+        }
+    }
+
+    Write-Host " >> Default settings restored." -ForegroundColor Green
+    Write-Host ""
 }
 
 # --- MAIN MENU LOOP ---
@@ -278,6 +323,11 @@ do {
             Show-Documentation
             Pause
         }
+        '7' {
+            Write-Host "`n[7] Reverting to default settings..." -ForegroundColor Yellow
+            Revert-DefaultSettings
+            Pause
+        }
         'Q' {
             Write-Host "Exiting..." -ForegroundColor Green
             break
@@ -287,7 +337,7 @@ do {
             break
         }
         Default {
-            Write-Warning "Invalid selection. Please choose 1–6 or Q."
+            Write-Warning "Invalid selection. Please choose 1–7 or Q."
             Pause
         }
     }
