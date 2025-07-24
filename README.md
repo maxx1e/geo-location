@@ -2,6 +2,12 @@
 
 > **Interactive PowerShell menu to manage Windows 11 geolocation & sensor settings, network adapters, and public‑IP geolocation checks.**
 
+> **Disable policies before execution by running this with admin rights:**
+> ```powershell
+> Set-ExecutionPolicy Bypass -Scope Process -Force
+>```
+
+
 ---
 
 ## Table of Contents
