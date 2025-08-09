@@ -63,12 +63,44 @@ Function Disable-ServiceAndCheck {
 
 Function Check-ServiceStatus {
     Param([string]$Name)
+
+    # Try to get the service
     $svc = Get-CimInstance Win32_Service -Filter "Name='$Name'" -ErrorAction SilentlyContinue
-    If ($svc) {
-        Write-Host ("$Name ▶ StartupType={0}, Status={1}" -f $svc.StartMode, $svc.State)
-    } Else {
-        Write-Host ("$Name ▶ Not Installed")
+
+    if ($svc) {
+        # Service name in Cyan
+        Write-Host $Name -ForegroundColor Cyan -NoNewline
+        Write-Host " ▶ " -ForegroundColor Gray -NoNewline
+
+        # Colorize StartupType
+        switch ($svc.StartMode) {
+            "Auto" { $modeColor = 'Green'; $modeText = 'Automatic'; break }
+            "Manual" { $modeColor = 'Yellow'; $modeText = 'Manual'; break }
+            "Disabled" { $modeColor = 'Red'; $modeText = 'Disabled'; break }
+            default { $modeColor = 'White'; $modeText = $svc.StartMode }
+        }
+        Write-Host ("StartupType={0}" -f $modeText) -ForegroundColor $modeColor -NoNewline
+        Write-Host ", " -ForegroundColor Gray -NoNewline
+
+        # Colorize Status
+        switch ($svc.State) {
+            "Running" { $stateColor = 'Green'; break }
+            "Stopped" { $stateColor = 'Red'; break }
+            "Paused" { $stateColor = 'Yellow'; break }
+            "StartPending" { $stateColor = 'Yellow'; break }
+            "StopPending" { $stateColor = 'Yellow'; break }
+            default { $stateColor = 'White' }
+        }
+        Write-Host ("Status={0}" -f $svc.State) -ForegroundColor $stateColor
     }
+    else {
+        # Not installed in Red
+        Write-Host $Name -ForegroundColor Cyan -NoNewline
+        Write-Host " ▶ " -ForegroundColor Gray -NoNewline
+        Write-Host "Not Installed" -ForegroundColor Red
+    }
+
+    Write-Host ""
 }
 
 Function Disable-WiFiAdaptersAndCheck {
@@ -87,23 +119,65 @@ Function Disable-WiFiAdaptersAndCheck {
 }
 
 Function Check-NetworkAdaptersStatus {
-    Write-Host " >> Network adapters status:" -ForegroundColor Cyan
-    $adapters = Get-NetAdapter -ErrorAction SilentlyContinue
+    Write-Host "`n=== Network Adapters Status ===" -ForegroundColor Cyan
+
+    # Fetch adapters and PnP devices
+    $adapters = Get-NetAdapter   -ErrorAction SilentlyContinue
+    $pnpDevices = Get-PnpDevice -Class Net -ErrorAction SilentlyContinue
+
+    # Print a header with wider columns
+    $col1 = "Name".PadRight(40)
+    $col2 = "Description".PadRight(70)
+    $col3 = "Adapter Status".PadRight(15)
+    $col4 = "PnP Status".PadRight(15)
+    Write-Host ("{0}{1}{2}{3}" -f $col1, $col2, $col3, $col4) -ForegroundColor DarkGray
+    Write-Host ("-" * 150) -ForegroundColor DarkGray
+
     foreach ($adapter in $adapters) {
+        # Determine adapter status color & icon
+        switch ($adapter.Status) {
+            'Up' { $aColor = 'Green'; $aIcon = '✔'; break }
+            'Disabled' { $aColor = 'Red'; $aIcon = '✖'; break }
+            'Disconnected' { $aColor = 'Yellow'; $aIcon = '⚠'; break }
+            Default { $aColor = 'Gray'; $aIcon = '?'; break }
+        }
+
+        # Highlight Wi-Fi adapters
         $isWifi = $adapter.InterfaceDescription -Match 'Wireless|Wi-?Fi'
         $nameColor = if ($isWifi) { 'Magenta' } else { 'White' }
-        switch ($adapter.Status) {
-            'Up'           { $statusColor = 'Green'; break }
-            'Disabled'     { $statusColor = 'Red'; break }
-            'Disconnected' { $statusColor = 'Yellow'; break }
-            Default        { $statusColor = 'White' }
+
+        # Find PnP device
+        $pnp = $pnpDevices | Where-Object { $_.FriendlyName -eq $adapter.InterfaceDescription }
+        if ($pnp) {
+            switch ($pnp.Status) {
+                'OK' { $pColor = 'Green'; $pIcon = '✔'; break }
+                'Error' { $pColor = 'Red'; $pIcon = '✖'; break }
+                'Disabled' { $pColor = 'Yellow'; $pIcon = '⚠'; break }
+                Default { $pColor = 'Gray'; $pIcon = '?'; break }
+            }
+            $pText = "$pIcon $($pnp.Status)"
         }
-        Write-Host ($adapter.Name) -ForegroundColor $nameColor -NoNewline
-        Write-Host (" - $($adapter.InterfaceDescription)") -ForegroundColor 'Gray' -NoNewline
-        Write-Host (" ▶ Status: $($adapter.Status)") -ForegroundColor $statusColor
+        else {
+            $pColor = 'Yellow'; $pText = "⚠ Not found"
+        }
+
+        # Format each field to the new widths
+        $f1 = $adapter.Name.PadRight(40)
+        $f2 = $adapter.InterfaceDescription.PadRight(70)
+        $f3 = ("$aIcon $($adapter.Status)").PadRight(15)
+        $f4 = $pText.PadRight(15)
+
+        # Write the aligned, colored row
+        Write-Host $f1 -ForegroundColor $nameColor -NoNewline
+        Write-Host $f2 -ForegroundColor Gray      -NoNewline
+        Write-Host $f3 -ForegroundColor $aColor    -NoNewline
+        Write-Host $f4 -ForegroundColor $pColor
     }
+
     Write-Host ""
 }
+
+
 
 Function Set-RegistryValueAndCheck {
     Param([string]$Name, [int]$Value)
@@ -280,64 +354,79 @@ Function Revert-DefaultSettings {
     Write-Host " >> Default settings restored." -ForegroundColor Green
     Write-Host ""
 }
+Function Show-Menu {
+    Write-Host "`n=== Main Menu ===" -ForegroundColor Cyan
+    Write-Host "1) Check status (services, adapters & registry)" -ForegroundColor Green
+    Write-Host "2) Disable services & Wi-Fi adapters only" -ForegroundColor Yellow
+    Write-Host "3) Apply registry lockdown only" -ForegroundColor Yellow
+    Write-Host "4) Full lockdown (services + Wi-Fi + registry)" -ForegroundColor Yellow
+    Write-Host "5) Check public IP, DNS & geolocation" -ForegroundColor Magenta
+    Write-Host "6) Documentation & references" -ForegroundColor Magenta
+    Write-Host "7) Revert to default settings" -ForegroundColor Red
+    Write-Host "Q) Exit" -ForegroundColor DarkGray
+}
 
 # --- MAIN MENU LOOP ---
 do {
     Show-Menu
     $choice = Read-Host "Select an option"
-    switch ($choice) {
+
+    switch ($choice.ToUpper()) {
         '1' {
-            Write-Host "`n[1] Disabling services & Wi‑Fi adapters..." -ForegroundColor Yellow
-            foreach ($svc in $services) { Disable-ServiceAndCheck -Name $svc }
-            Disable-WiFiAdaptersAndCheck
-            Write-Host "[1] Applying registry tweaks..." -ForegroundColor Yellow
-            foreach ($kv in $regValues.GetEnumerator()) { Set-RegistryValueAndCheck -Name $kv.Key -Value $kv.Value }
+            Write-Host "`n[1] Checking service status..." -ForegroundColor Green
+            foreach ($svc in $services) { Check-ServiceStatus -Name $svc }
+
+            Write-Host "[1] Checking network adapter status..." -ForegroundColor Green
+            Check-NetworkAdaptersStatus
+
+            Write-Host "[1] Checking registry status..." -ForegroundColor Green
+            foreach ($name in $regValues.Keys) { Check-RegistryStatus -Name $name }
+
             Pause
         }
         '2' {
-            Write-Host "`n[2] Checking service status..." -ForegroundColor Yellow
-            foreach ($svc in $services) { Check-ServiceStatus -Name $svc }
-            Check-NetworkAdaptersStatus
-            Write-Host "`n[2] Checking registry status..." -ForegroundColor Yellow
-            foreach ($name in $regValues.Keys) { Check-RegistryStatus -Name $name }
-            Pause
-        }
-        '3' {
-            Write-Host "`n[3] Disabling services & Wi‑Fi adapters only..." -ForegroundColor Yellow
+            Write-Host "`n[2] Disabling services & Wi-Fi adapters only..." -ForegroundColor Yellow
             foreach ($svc in $services) { Disable-ServiceAndCheck -Name $svc }
             Disable-WiFiAdaptersAndCheck
             Pause
         }
+        '3' {
+            Write-Host "`n[3] Applying registry lockdown only..." -ForegroundColor Yellow
+            foreach ($kv in $regValues.GetEnumerator()) {
+                Set-RegistryValueAndCheck -Name $kv.Key -Value $kv.Value
+            }
+            Pause
+        }
         '4' {
-            Write-Host "`n[4] Applying registry lockdown only..." -ForegroundColor Yellow
-            foreach ($kv in $regValues.GetEnumerator()) { Set-RegistryValueAndCheck -Name $kv.Key -Value $kv.Value }
+            Write-Host "`n[4] Full lockdown: disabling services, Wi-Fi adapters & applying registry tweaks..." -ForegroundColor Yellow
+            foreach ($svc in $services) { Disable-ServiceAndCheck -Name $svc }
+            Disable-WiFiAdaptersAndCheck
+            foreach ($kv in $regValues.GetEnumerator()) {
+                Set-RegistryValueAndCheck -Name $kv.Key -Value $kv.Value
+            }
             Pause
         }
         '5' {
-            Write-Host "`n[5] Checking public IP, DNS & geolocation..." -ForegroundColor Yellow
+            Write-Host "`n[5] Checking public IP, DNS & geolocation..." -ForegroundColor Magenta
             Check-PublicIPAndDns
             Pause
         }
         '6' {
-            Write-Host "`n[6] Detailed documentation and references..." -ForegroundColor Yellow
+            Write-Host "`n[6] Detailed documentation & references..." -ForegroundColor Magenta
             Show-Documentation
             Pause
         }
         '7' {
-            Write-Host "`n[7] Reverting to default settings..." -ForegroundColor Yellow
+            Write-Host "`n[7] Reverting to default settings..." -ForegroundColor Red
             Revert-DefaultSettings
             Pause
         }
         'Q' {
-            Write-Host "Exiting..." -ForegroundColor Green
-            break
-        }
-        'q' {
-            Write-Host "Exiting..." -ForegroundColor Green
+            Write-Host "`nExiting..." -ForegroundColor DarkGray
             break
         }
         Default {
-            Write-Warning "Invalid selection. Please choose 1–7 or Q."
+            Write-Host "Invalid selection. Please choose 1–7 or Q." -ForegroundColor Red
             Pause
         }
     }
