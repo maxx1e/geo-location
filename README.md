@@ -50,6 +50,18 @@ All actions include built‑in verification and colored console output for easy 
 
 ---
 
+## Services going to be disabled
+
+ -   "lfsvc",             # Geolocation Service
+ -   "SensorService",     # Sensor Service
+ -   "SensrSvc",          # Sensor Monitoring Service
+ -   "SensorDataService", # Sensor Data Service
+ -   "MapsBroker",        # Downloaded Maps Manager
+ -   "DiagTrack",         # Connected User Experiences & Telemetry
+ -   "Wlansvc"            # WLAN AutoConfig
+
+---
+
 ## Prerequisites
 
 - **OS**: Windows 11 (should work on Windows 10 but only tested on 11)  
