@@ -13,15 +13,16 @@
 ## Table of Contents
 
 1. [Overview](#overview)  
-2. [Features](#features)  
-3. [Prerequisites](#prerequisites)  
-4. [Installation](#installation)  
-5. [Usage](#usage)  
-6. [Configuration](#configuration)  
-7. [How It Works](#how-it-works)  
-8. [Menu Options](#menu-options)  
-9. [External APIs & References](#external-apis--references)  
-10. [License](#license)  
+2. [Features](#features)
+3. [Services](#services)
+4. [Prerequisites](#prerequisites)  
+5. [Installation](#installation)  
+6. [Usage](#usage)  
+7. [Configuration](#configuration)  
+8. [How It Works](#how-it-works)  
+9. [Menu Options](#menu-options)  
+10. [External APIs & References](#external-apis--references)  
+11. [License](#license)  
 
 ---
 
@@ -50,7 +51,7 @@ All actions include built‑in verification and colored console output for easy 
 
 ---
 
-## Services going to be disabled
+## Services
 
  -   "lfsvc",             # Geolocation Service
  -   "SensorService",     # Sensor Service
