@@ -32,7 +32,7 @@ This PowerShell script provides an interactive menu to:
 
 - Disable/stop Windows geolocation & sensor-related services  
 - Disable physical Wi‑Fi adapters  
-- Apply registry lockdown for location and sensor settings  
+- Apply broader registry/privacy lockdown for location, sensors, app consent, activity feed, and telemetry  
 - Check current service, adapter, and registry statuses  
 - Query public IP, DNS configuration and lookup geolocation  
 - Display detailed documentation links and expected results  
@@ -43,8 +43,8 @@ All actions include built‑in verification and colored console output for easy 
 
 ## Features
 
-- **Granular controls** for services, adapters, registry or any combination  
-- **Status checks** after each change (service state, adapter status, registry values)  
+- **Granular controls** for services, adapters, and expanded registry/privacy controls  
+- **Status checks** after each change (service state, adapter status, expanded registry values)  
 - **Public IP & geolocation** lookup (uses [ipify](https://www.ipify.org/) & [ip-api.com](http://ip-api.com))  
 - **Interactive menu** with clear prompts and progress bars  
 - **Self‑documenting**: option to display detailed change summary with links  
@@ -59,7 +59,17 @@ All actions include built‑in verification and colored console output for easy 
  -   "SensorDataService", # Sensor Data Service
  -   "MapsBroker",        # Downloaded Maps Manager
  -   "DiagTrack",         # Connected User Experiences & Telemetry
- -   "Wlansvc"            # WLAN AutoConfig
+ -   "WlanSvc"            # WLAN AutoConfig
+
+## Registry/Privacy Lockdown Coverage
+
+The script now applies and verifies all of the following:
+
+- Location and sensor policy keys in `HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors`
+- Windows activity feed/timeline policy keys in `HKLM:\SOFTWARE\Policies\Microsoft\Windows\System`
+- Telemetry level policy in `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection`
+- App location capability consent (packaged + non-packaged) under both `HKLM` and `HKCU` consent stores
+- Sensor permission overrides (`SensorPermissionState`) and per-user device access deny state
 
 ---
 

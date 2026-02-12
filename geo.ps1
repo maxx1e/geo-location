@@ -30,13 +30,29 @@ $services = @(
     "WlanSvc"            # WLAN AutoConfig
 )
 
-$regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"
-$regValues = @{
-    "DisableLocation"                = 1
-    "DisableWindowsLocationProvider" = 1
-    "DisableSensors"                 = 1
-    "DisableLocationScripting"       = 1
-}
+$policyRegistrySettings = @(
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"; Name = "DisableLocation";                Value = 1 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"; Name = "DisableWindowsLocationProvider"; Value = 1 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"; Name = "DisableSensors";                 Value = 1 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"; Name = "DisableLocationScripting";       Value = 1 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System";             Name = "EnableActivityFeed";             Value = 0 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System";             Name = "PublishUserActivities";         Value = 0 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System";             Name = "UploadUserActivities";          Value = 0 },
+    @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection";     Name = "AllowTelemetry";                Value = 0 }
+)
+
+$privacyRegistrySettings = @(
+    @{ Path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location";                 Name = "Value"; Value = "Deny" },
+    @{ Path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location";                 Name = "Deny";  Value = 1 },
+    @{ Path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged";    Name = "Value"; Value = "Deny" },
+    @{ Path = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location";                 Name = "Value"; Value = "Deny" },
+    @{ Path = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location";                 Name = "Deny";  Value = 1 },
+    @{ Path = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged";    Name = "Value"; Value = "Deny" },
+    @{ Path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}"; Name = "SensorPermissionState"; Value = 0 },
+    @{ Path = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeviceAccess\Global\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}";   Name = "Value"; Value = "Deny" }
+)
+
+$registrySettings = $policyRegistrySettings + $privacyRegistrySettings
 
 # Startup defaults used by "revert"
 $serviceDefaultStartup = @{
@@ -134,32 +150,34 @@ function Check-NetworkAdaptersStatus {
     }
 }
 
-function Ensure-PolicyKey {
-    if (-not (Test-Path $regPath)) {
-        Write-Host "Creating policy key: $regPath"
-        New-Item -Path $regPath -Force | Out-Null
+function Ensure-RegistryPath {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        Write-Host "Creating registry key: $Path"
+        New-Item -Path $Path -Force | Out-Null
     }
 }
 
 function Set-RegistryValueAndCheck {
-    param([string]$Name, [int]$Value)
-    Ensure-PolicyKey
+    param([string]$Path, [string]$Name, [object]$Value)
+    Ensure-RegistryPath -Path $Path
     try {
-        New-ItemProperty -Path $regPath -Name $Name -Value $Value -PropertyType DWORD -Force | Out-Null
-        $prop = Get-ItemProperty -Path $regPath -Name $Name -ErrorAction Stop
-        Write-Host ("  {0} = {1}" -f $Name, $prop.$Name)
+        $propertyType = if ($Value -is [int] -or $Value -is [long]) { 'DWORD' } else { 'String' }
+        New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $propertyType -Force | Out-Null
+        $prop = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
+        Write-Host ("  [{0}] {1} = {2}" -f $Path, $Name, $prop.$Name)
     } catch {
-        Write-Warning "Failed setting '$Name': $_"
+        Write-Warning "Failed setting '$Name' at '$Path': $_"
     }
 }
 
 function Check-RegistryStatus {
-    param([string]$Name)
+    param([string]$Path, [string]$Name)
     try {
-        $prop = Get-ItemProperty -Path $regPath -Name $Name -ErrorAction Stop
-        Write-Host ("  {0} = {1}" -f $Name, $prop.$Name)
+        $prop = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
+        Write-Host ("  [{0}] {1} = {2}" -f $Path, $Name, $prop.$Name)
     } catch {
-        Write-Host ("  {0} = Not Configured" -f $Name)
+        Write-Host ("  [{0}] {1} = Not Configured" -f $Path, $Name)
     }
 }
 
@@ -190,6 +208,10 @@ function Check-PublicIPAndGeo {
 function Show-Documentation {
     Write-Host "References (short):"
     Write-Host "  Policies key: HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"
+    Write-Host "  Timeline/activity feed policies: HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+    Write-Host "  Telemetry policy: HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+    Write-Host "  App location consent: HKLM/HKCU ...\ConsentStore\location"
+    Write-Host "  Sensor overrides: HKLM/HKCU ...\Sensor and ...\DeviceAccess\Global"
     Write-Host "  Services: lfsvc, SensorService, SensrSvc, SensorDataService, MapsBroker, DiagTrack, WlanSvc"
     Write-Host "  Public IP: https://api.ipify.org"
     Write-Host "  IP Geo:    https://ip-api.com"
@@ -223,13 +245,13 @@ function Revert-DefaultSettings {
         }
     }
 
-    if (Test-Path $regPath) {
-        foreach ($name in $regValues.Keys) {
+    foreach ($entry in $registrySettings) {
+        if (Test-Path $entry.Path) {
             try {
-                Remove-ItemProperty -Path $regPath -Name $name -ErrorAction Stop
-                Write-Host ("  Removed policy: {0}" -f $name)
+                Remove-ItemProperty -Path $entry.Path -Name $entry.Name -ErrorAction Stop
+                Write-Host ("  Removed setting: [{0}] {1}" -f $entry.Path, $entry.Name)
             } catch {
-                Write-Warning "Could not remove policy '{0}': {1}" -f $name, $_
+                Write-Warning "Could not remove setting [{0}] {1}: {2}" -f $entry.Path, $entry.Name, $_
             }
         }
     }
@@ -260,7 +282,7 @@ do {
             Write-Host "[Status] Adapters:"
             Check-NetworkAdaptersStatus
             Write-Host "[Status] Registry:"
-            foreach ($name in $regValues.Keys) { Check-RegistryStatus -Name $name }
+            foreach ($entry in $registrySettings) { Check-RegistryStatus -Path $entry.Path -Name $entry.Name }
             Pause
         }
         '2' {
@@ -271,8 +293,8 @@ do {
         }
         '3' {
             Write-Host "[Action] Applying registry lockdown"
-            foreach ($kv in $regValues.GetEnumerator()) {
-                Set-RegistryValueAndCheck -Name $kv.Key -Value $kv.Value
+            foreach ($entry in $registrySettings) {
+                Set-RegistryValueAndCheck -Path $entry.Path -Name $entry.Name -Value $entry.Value
             }
             Pause
         }
@@ -280,8 +302,8 @@ do {
             Write-Host "[Action] Full lockdown"
             foreach ($svc in $services) { Disable-ServiceAndCheck -Name $svc }
             Disable-WiFiAdaptersAndCheck
-            foreach ($kv in $regValues.GetEnumerator()) {
-                Set-RegistryValueAndCheck -Name $kv.Key -Value $kv.Value
+            foreach ($entry in $registrySettings) {
+                Set-RegistryValueAndCheck -Path $entry.Path -Name $entry.Name -Value $entry.Value
             }
             Pause
         }
